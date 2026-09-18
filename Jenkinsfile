@@ -6,9 +6,8 @@ pipeline {
 
     environment {
         AWS_REGION = 'ap-south-1'
-        ECR_REPO = 'public.ecr.aws/m9y7o3u0/sachin-repo'
+        ECR_REPO = 'public.ecr.aws/m9y7o3u0/sachin-repo/nginx-app'
         TAG = "${BUILD_NUMBER}"
-        APP_NAME = 'nginx-app'
     }
 
     stages {
@@ -22,8 +21,12 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh 'sonar-scanner'
+                script {
+                    def scannerHome = tool 'sonarqube-scanner'
+
+                    withSonarQubeEnv('SonarQube') {
+                        sh "${scannerHome}/bin/sonar-scanner"
+                    }
                 }
             }
         }
@@ -31,7 +34,7 @@ pipeline {
         stage('Docker Build') {
             steps {
                 sh '''
-                    docker build -t ${ECR_REPO}/${APP_NAME}:${TAG} .
+                    docker build -t ${ECR_REPO}:${TAG} .
                 '''
             }
         }
@@ -43,7 +46,7 @@ pipeline {
                      credentialsId: 'aws-key']
                 ]) {
                     sh '''
-                        aws ecr-public get-login-password --region ap-south-1 | \
+                        aws ecr-public get-login-password --region us-east-1 | \
                         docker login --username AWS --password-stdin public.ecr.aws
                     '''
                 }
@@ -53,7 +56,7 @@ pipeline {
         stage('Push Image') {
             steps {
                 sh '''
-                    docker push ${ECR_REPO}/${APP_NAME}:${TAG}
+                    docker push ${ECR_REPO}:${TAG}
                 '''
             }
         }
@@ -62,7 +65,7 @@ pipeline {
     post {
         success {
             echo "CI completed successfully."
-            echo "Image: ${ECR_REPO}/${APP_NAME}:${TAG}"
+            echo "Image: ${ECR_REPO}:${TAG}"
         }
 
         failure {
