@@ -1,18 +1,92 @@
-name: Docker Image CI
+name: NGINX CI
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: public.ecr.aws/m9y7o3u0/sachin-repo/nginx-app
 
 jobs:
 
-  build:
+  nginx-ci:
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+
+      # ==========================================
+      # 1. Checkout source code
+      # ==========================================
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+
+      # ==========================================
+      # 2. Configure AWS
+      # ==========================================
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+
+      # ==========================================
+      # 3. Verify AWS authentication
+      # ==========================================
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      # ==========================================
+      # 5. Set Docker image tag
+      # ==========================================
+      - name: Set image tag
+        run: |
+          echo "IMAGE_TAG=nginx-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+
+
+      # ==========================================
+      # 6. Build Docker image
+      # ==========================================
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t $ECR_REPOSITORY:$IMAGE_TAG .
+
+
+      # ==========================================
+      # 7. Login to ECR Public
+      # ==========================================
+      - name: Login to ECR Public
+        run: |
+          aws ecr-public get-login-password \
+            --region us-east-1 | \
+          docker login \
+            --username AWS \
+            --password-stdin public.ecr.aws
+
+
+      # ==========================================
+      # 8. Push Docker image
+      # ==========================================
+      - name: Push Docker image
+        run: |
+          docker push $ECR_REPOSITORY:$IMAGE_TAG
+
+
+      # ==========================================
+      # 9. Display image
+      # ==========================================
+      - name: Display image
+        run: |
+          echo "=========================================="
+          echo "NGINX CI COMPLETED"
+          echo "=========================================="
+          echo "Image:"
+          echo "$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "=========================================="
